@@ -16,7 +16,7 @@ autocorrelation, and the cross-asset correlation structure.
 There is an interactive demo in `docs/`: the trained generator, the full
 preprocessing pipeline and the whole validation suite ported to JavaScript
 and run client-side, with no server and no dependencies. See
-[Browser demo]((https://ayasya771.github.io/GAFS_V3/)).
+(https://ayasya771.github.io/GAFS_V3/).
 
 ## How it works
 

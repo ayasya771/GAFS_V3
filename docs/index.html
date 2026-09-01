@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GAFS</title>
+<meta name="description" content="Interactive demo of a Wasserstein GAN market simulator: a conditional Temporal Fusion Transformer generator with contrastive regularisation, running entirely in the browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%232a78d6'/><path d='M18 70 L36 44 L52 58 L82 24' stroke='white' stroke-width='9' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <h1>GAFS</h1>
+      <span class="sub">Adversarial market scenario simulator</span>
+    </div>
+    <span class="badge" id="model-badge"><span class="dot"></span><span id="model-status">Loading model...</span></span>
+    <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-panel="data" aria-selected="true">Data</button>
+    <button role="tab" data-panel="pipeline" aria-selected="false">Pipeline</button>
+    <button role="tab" data-panel="generate" aria-selected="false">Scenarios</button>
+    <button role="tab" data-panel="validate" aria-selected="false">Validation</button>
+    <button role="tab" data-panel="model" aria-selected="false">Model</button>
+  </nav>
+
+
+  <section class="panel active" id="panel-data">
+    <div class="card">
+      <h2>Market panel</h2>
+      <p class="lede">The simulator conditions on a multi-asset price history and a macro state vector.
+        Pick a bundled panel or load your own CSV; anything with a date column, one or more
+        <code>*_close</code> price columns and any number of macro columns will work.</p>
+      <div class="controls">
+        <div class="field">
+          <label for="dataset">Panel</label>
+          <select id="dataset"></select>
+        </div>
+        <div class="field">
+          <label for="csv-upload">Your own CSV</label>
+          <input type="file" id="csv-upload" accept=".csv,text/csv">
+        </div>
+        <div class="field">
+          <label for="range-start">Window shown</label>
+          <div class="range-row">
+            <input type="range" id="range-start" min="0" max="100" value="0">
+            <output id="range-label">full</output>
+          </div>
+        </div>
+      </div>
+      <div class="stat-row" id="data-stats"></div>
+      <div class="grid-2">
+        <div>
+          <h3>Prices, indexed to 100 at the window start</h3>
+          <div class="chart" id="chart-prices"></div>
+        </div>
+        <div>
+          <h3>Macro conditioning series</h3>
+          <div class="chart" id="chart-macro"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Return characteristics</h2>
+      <p class="lede">Measured on the panel as loaded, with the same estimators the validation
+        tab applies to generated paths.</p>
+      <div class="scroll-x"><table id="table-data-stats"></table></div>
+    </div>
+  </section>
+
+
+  <section class="panel" id="panel-pipeline">
+    <div class="card">
+      <h2>Preprocessing</h2>
+      <p class="lede">Raw prices are not model input. They pass through bounded forward-fill,
+        MAD despiking, a stationarity transform and causal volatility scaling before the
+        network ever sees them. Each stage below is computed live from the panel you selected.</p>
+      <div class="controls">
+        <div class="field">
+          <label for="pipe-asset">Series</label>
+          <select id="pipe-asset"></select>
+        </div>
+        <div class="field">
+          <label for="mad-threshold">MAD threshold</label>
+          <div class="range-row">
+            <input type="range" id="mad-threshold" min="2" max="20" step="0.5" value="10">
+            <output id="mad-threshold-label">10.0</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="inject">Stress the filter</label>
+          <select id="inject">
+            <option value="none">No injection</option>
+            <option value="spike">Inject 12 bad ticks</option>
+            <option value="crash">Inject a 22% crash</option>
+            <option value="both">Inject both</option>
+          </select>
+        </div>
+      </div>
+      <div class="stat-row" id="pipeline-stats"></div>
+      <h3>Stage 1 &mdash; despiking: erroneous prints removed, real dislocations kept</h3>
+      <div class="chart" id="chart-mad"></div>
+      <p class="note" id="mad-note"></p>
+      <div class="grid-2">
+        <div>
+          <h3>Stage 2 &mdash; log returns</h3>
+          <div class="chart" id="chart-returns"></div>
+        </div>
+        <div>
+          <h3>Stage 3 &mdash; scaled by lagged 30-day volatility</h3>
+          <div class="chart" id="chart-scaled"></div>
+        </div>
+      </div>
+      <p class="note">Scaling divides each return by the realised volatility of the <em>preceding</em>
+        window, never the current one, so no future information reaches the features. Macro columns are
+        standardised with the statistics fitted on the training prefix and shipped with the model;
+        they are applied, never refitted, which is what makes a held-out panel a fair test.</p>
+    </div>
+    <div class="card">
+      <h2>Fractional differencing</h2>
+      <p class="lede">Log returns make a price series stationary but destroy its long memory.
+        Fractional differencing with <code>d</code> between 0 and 1 buys stationarity while
+        keeping some of it. Drag <code>d</code> to see the weight kernel and the transformed series.</p>
+      <div class="controls">
+        <div class="field">
+          <label for="fracdiff-d">Differencing order d</label>
+          <div class="range-row">
+            <input type="range" id="fracdiff-d" min="0.05" max="1" step="0.05" value="0.4">
+            <output id="fracdiff-d-label">0.40</output>
+          </div>
+        </div>
+        <div class="field">
+          <label>Kernel width</label>
+          <output id="fracdiff-width" class="mono">-</output>
+        </div>
+        <div class="field">
+          <label>Lag-1 autocorrelation</label>
+          <output id="fracdiff-acf" class="mono">-</output>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <h3>Weight kernel, newest lag first</h3>
+          <div class="chart" id="chart-ffd-weights"></div>
+        </div>
+        <div>
+          <h3>Fractionally differenced log price</h3>
+          <div class="chart" id="chart-ffd-series"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="panel" id="panel-generate">
+    <div class="card">
+      <h2>Scenario generation</h2>
+      <p class="lede">Pick a forecast origin, shock the macro state in its natural units, and the
+        generator draws independent 30-day paths from the conditional distribution it learned.
+        Everything runs locally: the weights are downloaded once and evaluated in this tab.</p>
+      <div class="controls">
+        <div class="field">
+          <label for="anchor">Forecast origin</label>
+          <select id="anchor"></select>
+        </div>
+        <div class="field">
+          <label for="n-scenarios">Scenarios</label>
+          <div class="range-row">
+            <input type="range" id="n-scenarios" min="50" max="1000" step="50" value="250">
+            <output id="n-scenarios-label">250</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="seed">Noise seed</label>
+          <input type="number" id="seed" value="7" min="0" max="99999" style="width:96px">
+        </div>
+        <div class="field" id="shock-fields"></div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="primary" id="run-generate" type="button">Generate</button>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="ghost" id="reset-shocks" type="button">Clear shocks</button>
+        </div>
+      </div>
+      <div class="progress" id="gen-progress" hidden><i></i></div>
+      <div class="stat-row" id="gen-stats"></div>
+      <div id="fan-charts"></div>
+    </div>
+    <div class="card">
+      <h2>Tail risk</h2>
+      <p class="lede">Value at risk and expected shortfall over the full 30-day horizon, measured
+        directly on the simulated paths. The portfolio row uses the weights below.</p>
+      <div class="controls" id="weight-controls"></div>
+      <div class="scroll-x"><table id="table-risk"></table></div>
+      <div class="grid-2" style="margin-top:14px">
+        <div>
+          <h3>Horizon return distribution</h3>
+          <div class="chart" id="chart-horizon"></div>
+        </div>
+        <div>
+          <h3>Sample paths</h3>
+          <div class="chart" id="chart-paths"></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Stress comparison</h2>
+      <p class="lede">Run a baseline and a shocked scenario set at the same origin and seed to
+        isolate what the macro conditioning actually does to the distribution.</p>
+      <div class="controls">
+        <button class="ghost" id="store-baseline" type="button">Store current run as baseline</button>
+        <button class="ghost" id="clear-baseline" type="button">Clear baseline</button>
+      </div>
+      <div id="stress-compare"><p class="empty">Store a baseline, apply shocks, then generate again.</p></div>
+    </div>
+  </section>
+
+
+  <section class="panel" id="panel-validate">
+    <div class="card">
+      <h2>Stylized facts</h2>
+      <p class="lede">A generator is only useful if its output behaves like a market. This runs the
+        model at many held-out origins and measures both the real and the generated returns with
+        identical estimators. Nothing here is precomputed.</p>
+      <div class="controls">
+        <div class="field">
+          <label for="n-anchors">Held-out origins</label>
+          <div class="range-row">
+            <input type="range" id="n-anchors" min="10" max="120" step="10" value="40">
+            <output id="n-anchors-label">40</output>
+          </div>
+        </div>
+        <div class="field">
+          <label for="per-anchor">Paths per origin</label>
+          <div class="range-row">
+            <input type="range" id="per-anchor" min="1" max="16" step="1" value="6">
+            <output id="per-anchor-label">6</output>
+          </div>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="primary" id="run-validate" type="button">Run validation</button>
+        </div>
+      </div>
+      <div class="progress" id="val-progress" hidden><i></i></div>
+      <div class="stat-row" id="val-stats"></div>
+      <div class="scroll-x"><table id="table-validate"></table></div>
+      <p class="note">Excess kurtosis above zero and a slowly decaying autocorrelation of absolute
+        returns are fat tails and volatility clustering. A negative leverage correlation reproduces
+        the equity leverage effect. The mean absolute autocorrelation of raw returns should stay near
+        zero: a generator that produces predictable returns has learned an arbitrage that does not exist.</p>
+    </div>
+    <div class="card">
+      <h2>Distributions and dependence</h2>
+      <div class="grid-2">
+        <div>
+          <h3>Return density, log scale</h3>
+          <div class="chart" id="chart-dist"></div>
+        </div>
+        <div>
+          <h3>Autocorrelation of absolute returns</h3>
+          <div class="chart" id="chart-acf"></div>
+        </div>
+      </div>
+      <h3 style="margin-top:16px">Cross-asset correlation</h3>
+      <div class="chart" id="chart-corr"></div>
+    </div>
+  </section>
+
+
+  <section class="panel" id="panel-model">
+    <div class="card">
+      <h2>What is running</h2>
+      <p class="lede">The weights on this page are the ones the training pipeline produced. The
+        forward pass is a direct port of the PyTorch module, and the page checks itself against a
+        reference input and output exported from PyTorch at load time rather than asserting agreement.</p>
+      <div class="stat-row" id="model-stats"></div>
+      <h3>Generator, conditional Temporal Fusion Transformer</h3>
+      <ul class="arch-list" id="arch-list"></ul>
+      <h3 style="margin-top:16px">Variable selection at the current origin</h3>
+      <p class="lede">The selection network re-weights its inputs at every step. These are the average
+        weights over the history window feeding the most recent scenario run.</p>
+      <div class="chart" id="chart-vsn"></div>
+    </div>
+    <div class="card">
+      <h2>Training objective</h2>
+      <p class="lede">A Wasserstein critic with a gradient penalty, plus a contrastive head that
+        keeps the critic's latent space organised so the generator cannot collapse onto a single
+        safe path.</p>
+      <h3>Critic</h3>
+      <div class="math">L_D = E[D(x_g)] - E[D(x)] + &lambda; E[(||&nabla; D(x&#770;)||&#8322; - 1)&#178;],
+&nbsp;&nbsp;x&#770; = &epsilon;x + (1-&epsilon;)x_g,&nbsp; &epsilon; ~ U[0,1]</div>
+      <h3>Contrastive term, NT-Xent over augmented views</h3>
+      <div class="math">L_c = -log[ exp(sim(z_i, z_j)/&tau;) / &Sigma;_k 1_[k&ne;i] exp(sim(z_i, z_k)/&tau;) ]</div>
+      <h3>Generator</h3>
+      <div class="math">L_G = -E[D(x_g)] + w_u &middot; uniformity(z_g) + w_m &middot; MMD(z_g, z_r)</div>
+      <div class="scroll-x"><table id="table-hyper"></table></div>
+    </div>
+    <div class="card">
+      <h2>Honest limits</h2>
+      <p class="lede">Things this demo does not claim.</p>
+      <ul>
+        <li>The bundled panels are simulated, not recorded market history. They carry the right
+          statistical structure, and the pipeline runs identically on real data, but no result here
+          is a statement about any real instrument.</li>
+        <li>Volatility scaling is inverted with the volatility at the forecast origin held fixed
+          across the horizon. Step one inverts exactly; later steps inherit that assumption.</li>
+        <li>The released weights come from a short CPU training run. Tail mass is thinner than the
+          data and within-window volatility clustering is weaker than a longer schedule produces.
+          The validation tab measures this rather than hiding it.</li>
+        <li>Nothing here is investment advice or a risk model you should trade against.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>Generative Adversarial Financial Simulation &mdash; WGAN-GP, conditional TFT generator,
+       SimCLR-style contrastive regularisation. Model, data and inference all run client-side;
+       no request leaves the page after load.</p>
+    <center><p>Made by <a href="https://www.ayasyabatta.com">Ayasya Kumar Batta</a></p></center>
+  </footer>
+</div>
+
+<script src="assets/js/nn.js"></script>
+<script src="assets/js/pipeline.js"></script>
+<script src="assets/js/generator.js"></script>
+<script src="assets/js/stats.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>

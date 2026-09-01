@@ -1,0 +1,38 @@
+[
+ {
+  "file": "holdout_panel.csv",
+  "label": "Holdout Panel",
+  "rows": 2600,
+  "start": "2011-01-03",
+  "end": "2020-12-18",
+  "assets": [
+   "EQ_LARGE_close",
+   "EQ_TECH_close",
+   "CMD_GOLD_close"
+  ],
+  "macro": [
+   "VIX_PROXY",
+   "RATE_10Y",
+   "CREDIT_SPREAD"
+  ],
+  "trained_on": false
+ },
+ {
+  "file": "reference_panel.csv",
+  "label": "Reference Panel",
+  "rows": 5000,
+  "start": "2001-01-01",
+  "end": "2020-02-28",
+  "assets": [
+   "EQ_LARGE_close",
+   "EQ_TECH_close",
+   "CMD_GOLD_close"
+  ],
+  "macro": [
+   "VIX_PROXY",
+   "RATE_10Y",
+   "CREDIT_SPREAD"
+  ],
+  "trained_on": true
+ }
+]

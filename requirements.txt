@@ -1,0 +1,17 @@
+# Core
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+torch>=2.1
+matplotlib>=3.7
+pyyaml>=6.0
+pyarrow>=14.0
+tqdm>=4.66
+
+yfinance>=0.2.40
+
+# Development
+pytest>=7.4
+
+# Optional, only if you use the Alpaca adapter:
+# alpaca-py>=0.21

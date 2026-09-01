@@ -1,0 +1,62 @@
+
+data:
+  tickers: [SPY, QQQ, GLD, TLT]
+  fred_series: [DGS10, VIXCLS, BAMLC0A0CM]
+  binance_symbols: [BTCUSDT, ETHUSDT]
+  start: "2000-01-01"
+  end: "2025-12-31"
+  interval: "1d"
+  raw_dir: data/raw
+
+preprocess:
+  ffill_limit: 3
+  mad_window: 51
+  mad_threshold: 10.0
+  mad_reversal_tol: 0.40
+  stationarity: log_returns
+  fracdiff_d: 0.4
+  fracdiff_threshold: 1.0e-4
+  scaling: vol
+  vol_window: 30
+  train_frac: 0.70
+
+window:
+  lookback: 90
+  horizon: 30
+  stride: 1
+  val_frac: 0.15
+  test_frac: 0.15
+
+model:
+  hidden: 64
+  heads: 4
+  z_dim: 16
+  dropout: 0.10
+  lstm_layers: 1
+  critic_arch: resnet
+  critic_channels: [64, 128, 128]
+  critic_ctx_channels: 16
+  proj_dim: 32
+
+train:
+  batch_size: 64
+  steps: 4000
+  n_critic: 5
+  lambda_gp: 10.0
+  lr_g: 1.0e-4
+  lr_d: 1.0e-4
+  beta1: 0.0
+  beta2: 0.9
+  tau: 0.2
+  w_contrastive: 1.0
+  w_uniform: 0.5
+  w_mmd: 1.0
+  ema_decay: 0.999
+  grad_clip: 0.0
+  log_every: 50
+  ckpt_every: 1000
+  seed: 7
+  device: auto
+
+paths:
+  out_dir: outputs

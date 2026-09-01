@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Downloaded and derived data. The bundled panels in data/market/ are tracked.
+data/raw/
+data/processed/
+
+# Training run artifacts. Curated copies live in reports/, and the weights the
+# browser demo needs are tracked under docs/model/.
+outputs/
+*.pt
+*.npz
+
+# Environments
+.venv/
+venv/
+.env
